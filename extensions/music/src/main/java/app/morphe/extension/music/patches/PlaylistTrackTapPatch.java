@@ -14,6 +14,9 @@ import androidx.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 
+import app.morphe.extension.music.patches.downloads.LocalDownloadManager;
+import app.morphe.extension.music.patches.downloads.OfflinePlaybackService;
+import app.morphe.extension.music.patches.downloads.PlayerRelay;
 import app.morphe.extension.music.settings.Settings;
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.Utils;
@@ -55,6 +58,11 @@ public final class PlaylistTrackTapPatch {
          * @return New command holding the queue add endpoint.
          */
         Object patch_createQueueAddCommand(byte[] queueAddEndpoint);
+
+        /**
+         * @return The default (empty) command. The app resolves it as 'nothing to do'.
+         */
+        Object patch_createEmptyCommand();
     }
 
     public enum TapAction {
@@ -87,9 +95,18 @@ public final class PlaylistTrackTapPatch {
     private static final int QUEUE_ADD_ENDPOINT_INSERT_POSITION_FIELD = 2;
     private static final int QUEUE_TARGET_VIDEO_ID_FIELD = 1;
     /**
+     * QueueInsertPosition.INSERT_AFTER_CURRENT_VIDEO
+     */
+    private static final int QUEUE_INSERT_POSITION_AFTER_CURRENT_VIDEO = 1;
+    /**
      * QueueInsertPosition.INSERT_AT_END
      */
     private static final int QUEUE_INSERT_POSITION_AT_END = 2;
+
+    /**
+     * Playlist ids of albums start with this. Album rows already have their own native swipe.
+     */
+    private static final String ALBUM_PLAYLIST_ID_PREFIX = "OLAK5uy";
 
     private static final int WIRE_TYPE_VARINT = 0;
     private static final int WIRE_TYPE_FIXED64 = 1;
@@ -116,6 +133,11 @@ public final class PlaylistTrackTapPatch {
         try {
             if (command == null) return null;
 
+            // A swipe to play next on a playlist row replays a tap on that row.
+            if (PlaylistSwipePlayNextPatch.consumeRequest()) {
+                return overrideCommandForSwipe(command);
+            }
+
             TapAction action = Settings.PLAYLIST_TRACK_TAP_ACTION.get();
             if (action == TapAction.DEFAULT) return command;
 
@@ -130,14 +152,61 @@ public final class PlaylistTrackTapPatch {
                 return command.patch_createSingleTrackCommand(watchEndpoint);
             }
 
+            if (OfflinePlaybackService.isPlayingNow()) {
+                LocalDownloadManager.queueInOfflinePlayer(fields.videoId, false);
+                return command.patch_createEmptyCommand();
+            }
+
             Logger.printDebug(() -> "Adding to queue video: " + fields.videoId + " of playlist: " + fields.playlistId);
-            Object queueAddCommand = command.patch_createQueueAddCommand(buildQueueAddEndpoint(fields.videoId));
+            Object queueAddCommand = command.patch_createQueueAddCommand(
+                    buildQueueAddEndpoint(fields.videoId, QUEUE_INSERT_POSITION_AT_END));
             Utils.showToastShort(str("morphe_music_playlist_track_tap_added_to_queue"));
             return queueAddCommand;
         } catch (Exception ex) {
             Logger.printException(() -> "overrideCommand failure", ex);
             return command;
         }
+    }
+
+    /**
+     * Handles the tap that a swipe on a playlist row replays.
+     * A track of a playlist is queued right after the current one. Anything else does nothing,
+     * since the swipe must never open a page or start a playlist.
+     */
+    private static Object overrideCommandForSwipe(Command command) {
+        try {
+            Object watchEndpoint = command.patch_getWatchEndpoint();
+            if (watchEndpoint != null) {
+                WatchEndpointFields fields = parseWatchEndpoint(command.patch_serializeWatchEndpoint(watchEndpoint));
+                if (isPlaylistTrackTap(fields) && !fields.playlistId.startsWith(ALBUM_PLAYLIST_ID_PREFIX)) {
+                    Logger.printDebug(() -> "Swipe play next video: " + fields.videoId
+                            + " of playlist: " + fields.playlistId);
+                    // The offline player is playing: the track goes into its queue, and the
+                    // app's own player does not take over. A track not downloaded is streamed.
+                    if (OfflinePlaybackService.isPlayingNow()) {
+                        // A title not downloaded waits for the app's player.
+                        if (LocalDownloadManager.localFileFor(fields.videoId) == null) {
+                            PlayerRelay.queueOnlineTrack(fields.videoId);
+                        } else {
+                            LocalDownloadManager.queueInOfflinePlayer(fields.videoId, true);
+                        }
+                        return command.patch_createEmptyCommand();
+                    }
+                    // The app's player plays: a downloaded title waits for the offline player.
+                    if (PlayerRelay.offerDownloaded(fields.videoId)) {
+                        return command.patch_createEmptyCommand();
+                    }
+                    Object queueAddCommand = command.patch_createQueueAddCommand(
+                            buildQueueAddEndpoint(fields.videoId, QUEUE_INSERT_POSITION_AFTER_CURRENT_VIDEO));
+                    PlaylistSwipePlayNextPatch.showQueuedFeedback();
+                    return queueAddCommand;
+                }
+            }
+            Logger.printDebug(() -> "Swipe on a row that is not a playlist track, ignored");
+        } catch (Exception ex) {
+            Logger.printException(() -> "overrideCommandForSwipe failure", ex);
+        }
+        return command.patch_createEmptyCommand();
     }
 
     /**
@@ -199,9 +268,9 @@ public final class PlaylistTrackTapPatch {
     }
 
     /**
-     * @return Serialized QueueAddEndpoint that appends the video to the end of the queue.
+     * @return Serialized QueueAddEndpoint that inserts the video at the given position of the queue.
      */
-    private static byte[] buildQueueAddEndpoint(String videoId) {
+    private static byte[] buildQueueAddEndpoint(String videoId, int insertPosition) {
         ByteArrayOutputStream queueTarget = new ByteArrayOutputStream();
         writeLengthDelimited(queueTarget, QUEUE_TARGET_VIDEO_ID_FIELD,
                 videoId.getBytes(StandardCharsets.UTF_8));
@@ -210,7 +279,7 @@ public final class PlaylistTrackTapPatch {
         writeLengthDelimited(queueAddEndpoint, QUEUE_ADD_ENDPOINT_QUEUE_TARGET_FIELD,
                 queueTarget.toByteArray());
         writeVarint(queueAddEndpoint, (QUEUE_ADD_ENDPOINT_INSERT_POSITION_FIELD << 3) | WIRE_TYPE_VARINT);
-        writeVarint(queueAddEndpoint, QUEUE_INSERT_POSITION_AT_END);
+        writeVarint(queueAddEndpoint, insertPosition);
         return queueAddEndpoint.toByteArray();
     }
 

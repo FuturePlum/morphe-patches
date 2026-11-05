@@ -11,6 +11,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.util.Base64;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -19,6 +20,7 @@ import androidx.annotation.Nullable;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import app.morphe.extension.music.patches.downloads.LocalDownloadManager;
@@ -52,6 +54,17 @@ public final class DownloadsPatch {
     /** Command field of the 'ypc/get_offline_upsell' endpoint. */
     private static final int OFFLINE_UPSELL_ENDPOINT = 133724106;
     private static final Pattern VIDEO_ID = Pattern.compile("[A-Za-z0-9_-]{11}");
+    /** Album and playlist ids, or the browse id of an album, found anywhere in a command. */
+    private static final Pattern PLAYLIST_ID = Pattern.compile(
+            "OLAK5uy_[A-Za-z0-9_-]{20,}|RDCLAK[A-Za-z0-9_-]{20,}|PL[A-Za-z0-9_-]{16,}|MPREb_[A-Za-z0-9_-]{8,}");
+
+    /**
+     * Leaving the local downloads screen leaves the stock offline page under it, with its tab
+     * still selected. When set, one Back is sent to pop that page.
+     */
+    private static final boolean POP_STOCK_OFFLINE_PAGE = true;
+    private static volatile boolean stockOfflinePageOpened;
+    private static volatile long lastPlaylistDownloadTime;
 
     private static volatile long lastFlyoutDownloadTime;
     private static volatile long lastMainPlayerDownloadTime;
@@ -116,7 +129,48 @@ public final class DownloadsPatch {
                 videoId, Utils.getActivity(), "https://music.youtube.com/watch?v=" + videoId);
     }
 
+    /** Whether the downloads are saved inside the app, which the downloads screen needs. */
+    public static boolean isInAppDownloadsMode() {
+        return inAppDownloads();
+    }
+
+    /**
+     * Opens the downloads screen from the Downloads chip of the home page. No page of the app is
+     * opened under it, so nothing has to be closed when it is left: the home page is shown again.
+     */
+    public static void openLocalDownloadsFromHome() {
+        openLocalDownloads(false);
+    }
+
     private static void openLocalDownloads() {
+        openLocalDownloads(true);
+    }
+
+    /** Extra of the intent that makes the downloads activity show the favorites by artist. */
+    public static final String FAVORITES_EXTRA = "morphe_favorites_by_artist";
+
+    /**
+     * Opens the liked songs sorted by artist, from the Favorites chip of the home page. Like the
+     * downloads screen it lies over the home page, which is shown again when it is left.
+     */
+    public static void openFavoritesFromHome() {
+        Activity activity = Utils.getActivity();
+        if (activity == null) return;
+
+        final long now = System.currentTimeMillis();
+        if (now - lastLocalDownloadsOpenTime < IGNORE_DOUBLE_CLICK_DURATION_MS) return;
+        lastLocalDownloadsOpenTime = now;
+        stockOfflinePageOpened = false;
+
+        Intent intent = new Intent();
+        intent.setClassName(activity, "com.google.android.gms.common.api.GoogleApiActivity");
+        intent.setPackage(activity.getPackageName());
+        intent.setData(Uri.parse(BaseActivityHook.MORPHE_DOWNLOADS_INTENT));
+        intent.putExtra(FAVORITES_EXTRA, true);
+        activity.startActivity(intent);
+    }
+
+    private static void openLocalDownloads(boolean stockOfflinePageUnderneath) {
         Activity activity = Utils.getActivity();
         if (activity == null) return;
 
@@ -125,13 +179,78 @@ public final class DownloadsPatch {
         final long now = System.currentTimeMillis();
         if (now - lastLocalDownloadsOpenTime < IGNORE_DOUBLE_CLICK_DURATION_MS) return;
         lastLocalDownloadsOpenTime = now;
-        Logger.printDebug(() -> "Offline tab opened, showing the local downloads");
+        stockOfflinePageOpened = stockOfflinePageUnderneath;
+        Logger.printDebug(() -> "Showing the local downloads, stock offline page underneath: "
+                + stockOfflinePageUnderneath);
 
         Intent intent = new Intent();
         intent.setClassName(activity, "com.google.android.gms.common.api.GoogleApiActivity");
         intent.setPackage(activity.getPackageName());
         intent.setData(Uri.parse(BaseActivityHook.MORPHE_DOWNLOADS_INTENT));
         activity.startActivity(intent);
+    }
+
+    /**
+     * Called when the local downloads screen is closed. The stock offline page it was opened over
+     * is still showing, with the Download tab selected, so it is closed with one Back.
+     */
+    public static void onLocalDownloadsClosed() {
+        try {
+            if (!POP_STOCK_OFFLINE_PAGE || !stockOfflinePageOpened) return;
+            stockOfflinePageOpened = false;
+
+            // Waits for the downloads screen to be gone, so Back reaches the main activity.
+            Utils.runOnMainThreadDelayed(() -> {
+                Activity activity = Utils.getActivity();
+                if (activity == null || activity.isFinishing()) return;
+                activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK));
+                activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK));
+            }, 350);
+        } catch (Exception ex) {
+            Logger.printException(() -> "onLocalDownloadsClosed failure", ex);
+        }
+    }
+
+    /**
+     * Looks for an album or playlist id in the command, either as is or inside the encoded
+     * parameters of its first field.
+     *
+     * @return The id, or an empty string if the command is not about an album or playlist.
+     */
+    private static String findPlaylistId(byte[] command) {
+        Logger.printDebug(() -> "Looking for a playlist in command: "
+                + Base64.encodeToString(command, Base64.NO_WRAP));
+
+        String raw = new String(command, StandardCharsets.ISO_8859_1);
+        Matcher matcher = PLAYLIST_ID.matcher(raw);
+        if (matcher.find()) return matcher.group();
+
+        try {
+            String value = new ProtoMessage(command).messageField(OFFLINE_UPSELL_ENDPOINT).stringField(1);
+            if (value.isEmpty()) return "";
+            matcher = PLAYLIST_ID.matcher(value);
+            if (matcher.find()) return matcher.group();
+
+            byte[] decoded = Base64.decode(Uri.decode(value), Base64.URL_SAFE);
+            matcher = PLAYLIST_ID.matcher(new String(decoded, StandardCharsets.ISO_8859_1));
+            if (matcher.find()) return matcher.group();
+        } catch (Exception ex) {
+            Logger.printDebug(() -> "Command holds no readable parameters", ex);
+        }
+        return "";
+    }
+
+    /** Saves a whole album or playlist, which only the in-app downloads can do. */
+    private static boolean onMenuDownloadPlaylist(String playlistId) {
+        if (!isFlyoutMenuOverridden() || !inAppDownloads()) return false;
+
+        final long now = System.currentTimeMillis();
+        if (now - lastPlaylistDownloadTime < IGNORE_DOUBLE_CLICK_DURATION_MS) return true;
+        lastPlaylistDownloadTime = now;
+
+        Logger.printDebug(() -> "Menu download of playlist " + playlistId);
+        LocalDownloadManager.enqueuePlaylist(playlistId);
+        return true;
     }
 
     private static boolean isOfflineBrowseCommand(byte[] bytes) {
@@ -219,9 +338,13 @@ public final class DownloadsPatch {
             }
             Utils.verifyOnMainThread();
 
-            String videoId = getOfflineUpsellVideoId(message.toByteArray());
-            // Albums and playlists are left to the app.
-            if (videoId.isEmpty()) return false;
+            byte[] commandBytes = message.toByteArray();
+            String videoId = getOfflineUpsellVideoId(commandBytes);
+            if (videoId.isEmpty()) {
+                // Albums and playlists have no video id, so the whole list is saved instead.
+                String playlistId = findPlaylistId(commandBytes);
+                return !playlistId.isEmpty() && onMenuDownloadPlaylist(playlistId);
+            }
 
             return onMenuDownload(videoId);
         } catch (Exception ex) {

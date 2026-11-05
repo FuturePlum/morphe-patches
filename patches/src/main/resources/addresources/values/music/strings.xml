@@ -135,6 +135,12 @@ Second \"item\" text"</string>
     <!-- misc.audiovideoswitch.enableAudioVideoSwitchPatch -->
     <string name="morphe_music_enable_audio_video_switch_title">Enable audio/video switch</string>
     <string name="morphe_music_enable_audio_video_switch_summary">Try to switch Audio Track Version and Official Music Video</string>
+    <string name="morphe_music_video_fallback_title">Find the clip when Video is greyed out</string>
+    <string name="morphe_music_video_fallback_summary">Tapping Video when it is greyed out looks for the matching music video and plays it in place of the audio, keeping your queue. Needs the audio/video switch</string>
+    <string name="morphe_music_video_not_found">No music video found for this song</string>
+    <string name="morphe_music_auto_audio_version_title">Always play the audio version</string>
+    <string name="morphe_music_auto_audio_version_summary">When a song starts as a music video, switch to its audio version (with the real cover) on its own, keeping your queue. Needs the audio/video switch</string>
+    <string name="morphe_music_audio_video_switch_failed">Could not switch without changing your queue</string>
 
     <!-- interaction.downloads.downloadsPatch -->
     <string name="morphe_external_downloader_screen_summary">Download music videos, podcasts, or songs with third-party downloading apps</string>
@@ -151,6 +157,17 @@ Downloaded tracks appear here"</string>
     <string name="morphe_music_downloads_sort_artist">Sort by artist</string>
     <string name="morphe_music_downloads_sort_title">Sort by title</string>
     <string name="morphe_music_downloads_sort_size">Sort by size</string>
+    <string name="morphe_music_downloads_sort_recent">Sort by recently added</string>
+    <string name="morphe_music_downloads_sort_album">Sort by album</string>
+    <string name="morphe_music_downloads_sort_duration">Sort by duration</string>
+    <string name="morphe_music_downloads_filter_all">All</string>
+    <string name="morphe_music_downloads_filter_favorites">Favorites</string>
+    <string name="morphe_music_downloads_shuffle">Shuffle</string>
+    <string name="morphe_music_downloads_favorite">Favorite</string>
+    <string name="morphe_music_downloads_playlist_started">Preparing the album download…</string>
+    <string name="morphe_music_downloads_playlist_queued">Downloading %1$s tracks</string>
+    <string name="morphe_music_downloads_playlist_complete">Album downloaded</string>
+    <string name="morphe_music_downloads_playlist_failed">Could not list the tracks of this album</string>
     <string name="morphe_music_downloads_delete_all">Delete all downloads</string>
     <string name="morphe_music_downloads_delete_all_title">Delete all downloads?</string>
     <string name="morphe_music_downloads_delete_all_message">All downloaded tracks will be deleted from this device</string>
@@ -158,11 +175,60 @@ Downloaded tracks appear here"</string>
     <string name="morphe_music_downloads_nothing_found">Nothing found</string>
     <string name="morphe_music_downloads_actions_for">Actions for %s</string>
     <string name="morphe_music_downloads_play">Play</string>
+    <string name="morphe_music_downloads_play_next">Play next</string>
+    <string name="morphe_music_downloads_play_next_added">%s will play next</string>
     <string name="morphe_music_downloads_play_pause">Play or pause</string>
     <string name="morphe_music_downloads_previous">Previous</string>
     <string name="morphe_music_downloads_next">Next</string>
     <string name="morphe_music_downloads_pause">Pause</string>
+    <string name="morphe_music_offline_mini_bar_title">Offline mini player on every page</string>
+    <string name="morphe_music_offline_mini_bar_summary">While a downloaded track plays, show its mini player in place of the one of the app, on every page. A button switches back to the mini player of the app</string>
+    <string name="morphe_music_offline_mini_bar_label">Offline</string>
+    <string name="morphe_music_offline_mini_bar_to_online">Online</string>
+    <string name="morphe_music_offline_mini_bar_to_offline">Offline player</string>
+    <string name="morphe_music_home_downloads_chip_title">Downloads chip on the home page</string>
+    <string name="morphe_music_home_downloads_chip_summary">Adds a Downloads chip before the moods (Relax, Energize...) on the home page. It opens your downloads, and leaving them brings you back to the home page. Needs the downloads inside the app</string>
+    <string name="morphe_music_home_favorites_chip_title">Favorites chip on the home page</string>
+    <string name="morphe_music_home_favorites_chip_summary">Adds a Favorites chip on the home page, next to the Downloads chip. It opens your liked songs sorted by artist</string>
+    <string name="morphe_music_favorites_chip_label">Favorites</string>
+    <string name="morphe_music_favorites_screen_title">Favorites by artist</string>
+    <string name="morphe_music_favorites_summary">%1$d artists • %2$d liked songs</string>
+    <string name="morphe_music_favorites_songs_count">%1$d songs</string>
+    <string name="morphe_music_favorites_one_song">1 song</string>
+    <string name="morphe_music_favorites_search_hint">Search an artist</string>
+    <string name="morphe_music_favorites_sort_count">Most songs</string>
+    <string name="morphe_music_favorites_sort_name">A–Z</string>
+    <string name="morphe_music_favorites_play_all">Play all</string>
+    <string name="morphe_music_favorites_queue_all">Add all to the queue</string>
+    <string name="morphe_music_favorites_unknown_artist">Other</string>
+    <string name="morphe_music_favorites_loading">Updating your liked songs…</string>
+    <string name="morphe_music_favorites_error_login">The app has not sent your sign-in yet. Go back to the home page, wait for it to load, then open Favorites again</string>
+    <string name="morphe_music_favorites_error_http">YouTube refused the request (code %1$s)</string>
+    <string name="morphe_music_favorites_error_network">No connection to YouTube</string>
+    <string name="morphe_music_favorites_error_empty">YouTube sent no liked songs</string>
+    <string name="morphe_music_favorites_empty">No liked songs yet</string>
+    <string name="morphe_music_favorites_nothing_found">No artist found</string>
+    <string name="morphe_music_favorites_added_next">Added to play next</string>
+    <string name="morphe_music_favorites_added_all">%1$d songs added to the queue</string>
+    <string name="morphe_music_favorites_cannot_queue">The queue could not be reached, nothing was changed</string>
     <string name="morphe_music_downloads_close">Close</string>
+    <string name="morphe_music_downloads_now_playing">Now playing</string>
+    <string name="morphe_music_downloads_close_player">Close player</string>
+    <string name="morphe_music_downloads_up_next">Up next</string>
+    <string name="morphe_music_downloads_repeat">Repeat</string>
+    <string name="morphe_music_downloads_reorder">Reorder</string>
+    <string name="morphe_music_downloads_remove_from_queue">Remove from queue</string>
+    <string name="morphe_music_downloads_track_count">%1$s tracks</string>
+    <string name="morphe_music_downloads_sleep_timer">Sleep timer</string>
+    <string name="morphe_music_downloads_sleep_off">Turn off timer</string>
+    <string name="morphe_music_downloads_sleep_minutes">%1$s minutes</string>
+    <string name="morphe_music_downloads_sleep_hour">1 hour</string>
+    <string name="morphe_music_downloads_sleep_end_of_track">End of track</string>
+    <string name="morphe_music_downloads_tab_songs">Songs</string>
+    <string name="morphe_music_downloads_tab_albums">Albums</string>
+    <string name="morphe_music_downloads_tab_artists">Artists</string>
+    <string name="morphe_music_downloads_unknown_album">Unknown album</string>
+    <string name="morphe_music_downloads_back">Back</string>
     <string name="morphe_music_downloads_delete">Delete</string>
     <string name="morphe_music_downloads_delete_track">Delete download</string>
     <string name="morphe_music_downloads_delete_track_title">Delete download?</string>
@@ -312,6 +378,24 @@ SABR playback (Spoof video streams turned off)"</string>
     <string name="morphe_music_playlist_track_tap_action_entry_add_to_queue">Add the selected track to the queue</string>
     <!-- 'Added to queue' should be translated using the same localized wording YouTube Music displays for the toast. -->
     <string name="morphe_music_playlist_track_tap_added_to_queue">Added to queue</string>
+
+    <string name="morphe_music_downloads_hero_subtitle">%1$s MB • %2$s</string>
+    <string name="morphe_music_downloads_sort_reverse">Reverse the order</string>
+    <string name="morphe_music_downloads_sort_reversed">reversed</string>
+    <string name="morphe_music_downloads_sort_favorites_first">Favorites first</string>
+    <string name="morphe_music_downloads_no_favorites">No favorites yet\nTap the heart of a track to add it here</string>
+    <string name="morphe_music_smooth_animations_title">Smooth animations</string>
+    <string name="morphe_music_smooth_animations_summary">Springy, bouncy motion in the downloads screen and the offline player. When off, things appear without moving</string>
+    <string name="morphe_music_swipe_play_next_title">Swipe a playlist track to play it next</string>
+    <string name="morphe_music_swipe_play_next_summary">Swipe a track of a playlist to the right to play it right after the current one, without replacing your queue</string>
+    <string name="morphe_music_swipe_play_next_label">Play next</string>
+    <string name="morphe_music_swipe_play_next_added">Playing next</string>
+    <string name="morphe_music_switch_player_failed">Couldn\'t move the list to the other player</string>
+    <string name="morphe_music_relay_offline_added">Downloaded track will play after this one</string>
+    <string name="morphe_music_relay_online_added">Track will play after this one, in the app\'s player</string>
+    <string name="morphe_music_relay_failed">Couldn\'t hand the music over to the other player</string>
+    <string name="morphe_music_stream_add_failed">Couldn\'t add this track (a connection is needed)</string>
+    <string name="morphe_music_stream_skipped">Skipped a track that can\'t be streamed</string>
 
     <!-- layout.buttons.hideButtonsPatch -->
     <string name="morphe_music_hide_cast_button_title">Hide Cast button</string>

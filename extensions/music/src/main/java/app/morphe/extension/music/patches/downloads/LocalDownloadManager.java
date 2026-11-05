@@ -37,6 +37,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
+import app.morphe.extension.music.patches.album.PlaylistRequest;
 import app.morphe.extension.music.patches.scrobbling.ScrobbleManager;
 import app.morphe.extension.music.patches.spoof.SpoofVideoStreamsPatch;
 import app.morphe.extension.music.settings.Settings;
@@ -80,7 +81,29 @@ public final class LocalDownloadManager {
 
     private static final Set<String> ACTIVE_DOWNLOADS = ConcurrentHashMap.newKeySet();
 
+    /** While a whole album is saved, per track toasts would only pile up, so they are skipped. */
+    private static volatile boolean batchMode;
+
     private LocalDownloadManager() {
+    }
+
+    /**
+     * @return The downloaded audio file of this video id, or null when it is not downloaded.
+     */
+    @Nullable
+    public static File localFileFor(@Nullable String videoId) {
+        try {
+            if (videoId == null || !VIDEO_ID.matcher(videoId).matches()) return null;
+            File directory = new File(
+                    Utils.getContext().getExternalFilesDir(Environment.DIRECTORY_MUSIC), "Morphe");
+            File webm = new File(directory, videoId + ".webm");
+            if (webm.isFile()) return webm;
+            File m4a = new File(directory, videoId + ".m4a");
+            if (m4a.isFile()) return m4a;
+        } catch (Exception ex) {
+            Logger.printException(() -> "localFileFor failure", ex);
+        }
+        return null;
     }
 
     /** Must be called from the main thread. Resolution and downloading happen in background. */
@@ -110,6 +133,41 @@ public final class LocalDownloadManager {
         });
     }
 
+    /**
+     * Saves every track of an album or playlist one after the other.
+     * Must be called from the main thread. Listing and downloading happen in background.
+     *
+     * @param id A playlist id, or the browse id of an album.
+     */
+    public static void enqueuePlaylist(String id) {
+        Utils.showToastShort(str("morphe_music_downloads_playlist_started"));
+
+        Utils.submitOnBackgroundThread(() -> {
+            PlaylistTracksRequest.Result result = PlaylistTracksRequest.fetch(id);
+            if (result.songs().isEmpty()) {
+                Utils.showToastShort(str("morphe_music_downloads_playlist_failed"));
+                return null;
+            }
+
+            Utils.showToastShort(str("morphe_music_downloads_playlist_queued", result.songs().size()));
+            batchMode = true;
+            try {
+                for (PlaylistRequest.Song song : result.songs()) {
+                    downloadBlocking(song.videoId(), song.title(), song.artist(), result.title(),
+                            song.durationSeconds(), null);
+                }
+            } finally {
+                batchMode = false;
+            }
+            Utils.showToastShort(str("morphe_music_downloads_playlist_complete"));
+            return null;
+        });
+    }
+
+    private static void toastUnlessBatch(String message) {
+        if (!batchMode) Utils.showToastShort(message);
+    }
+
     private static void downloadBlocking(String videoId, String title, String artist, String album,
                                          int duration, Bitmap artwork) {
         if (!ACTIVE_DOWNLOADS.add(videoId)) {
@@ -125,7 +183,7 @@ public final class LocalDownloadManager {
             if (new File(directory, videoId + ".webm").isFile()
                     || new File(directory, videoId + ".m4a").isFile()) {
                 Logger.printDebug(() -> "Already downloaded: " + videoId);
-                Utils.showToastShort(str("morphe_music_downloads_already_saved"));
+                toastUnlessBatch(str("morphe_music_downloads_already_saved"));
                 return;
             }
 
@@ -169,7 +227,7 @@ public final class LocalDownloadManager {
             Logger.printDebug(() -> "Saved " + destination + " (" + destination.length() + " bytes)");
 
             OfflineTrack.save(directory, videoId, title, artist, album, duration, artwork);
-            Utils.showToastShort(str("morphe_music_downloads_complete"));
+            toastUnlessBatch(str("morphe_music_downloads_complete"));
         } catch (Exception ex) {
             Logger.printException(() -> "Local audio download failed: " + videoId, ex);
             awaitNotificationSlot();
@@ -179,6 +237,158 @@ public final class LocalDownloadManager {
             ACTIVE_DOWNLOADS.remove(videoId);
         }
     }
+
+    // region Tracks that play from the network inside the offline player
+
+    /** A marker file stands for a track that is streamed, so it can sit in the queue like a download. */
+    public static final String STREAM_EXTENSION = ".stream";
+
+    private static final long STREAM_ENTRY_MAX_AGE_MILLISECONDS = 14L * 24 * 60 * 60 * 1000;
+
+    /** Marker, metadata and cover of the streamed tracks sit here, away from the downloads. */
+    public static File streamDirectory() {
+        return new File(Utils.getContext().getExternalFilesDir(Environment.DIRECTORY_MUSIC), "MorpheStream");
+    }
+
+    public static boolean isStreamPath(@Nullable String path) {
+        return path != null && path.endsWith(STREAM_EXTENSION);
+    }
+
+    public static String userAgent() {
+        return USER_AGENT;
+    }
+
+    /** Blocking. @return The address of an audio stream that can play now, or null. */
+    @Nullable
+    static String resolveStreamUrl(String videoId) {
+        try {
+            ResolvedStream resolved = resolveStream(videoId);
+            if (resolved == null) return null;
+            String url = resolved.format().getUrl();
+            return url.isBlank() ? null : url;
+        } catch (Exception ex) {
+            Logger.printException(() -> "Could not resolve the stream of " + videoId, ex);
+            return null;
+        }
+    }
+
+    /**
+     * Blocking. Writes the marker, the metadata and the cover of a track that is not downloaded.
+     *
+     * @return The marker, or null when the track cannot be found.
+     */
+    @Nullable
+    private static File createStreamEntry(String videoId) {
+        try {
+            File directory = streamDirectory();
+            if (!directory.isDirectory() && !directory.mkdirs()) return null;
+            File marker = new File(directory, videoId + STREAM_EXTENSION);
+            // Already known from an earlier time: no need to ask the network again.
+            if (marker.isFile() && new File(directory, videoId + ".json").isFile()) return marker;
+
+            ResolvedStream resolved = resolveStream(videoId);
+            if (resolved == null) return null;
+            VideoDetails details = resolved.details();
+            String title = firstNotBlank(null, details.getTitle(), videoId);
+            String artist = firstNotBlank(null, stripTopic(details.getOwnerChannelName()), "");
+            Bitmap artwork = resolveArtwork(videoId, details);
+            OfflineTrack.save(directory, videoId, title, artist, "", details.getLengthSeconds(), artwork);
+            if (!marker.isFile() && !marker.createNewFile()) return null;
+            purgeOldStreamEntries(directory);
+            return marker;
+        } catch (Exception ex) {
+            Logger.printException(() -> "Could not prepare the streamed track " + videoId, ex);
+            return null;
+        }
+    }
+
+    /** Forgets the streamed tracks that were not touched for a while and are not in the queue. */
+    private static void purgeOldStreamEntries(File directory) {
+        try {
+            File[] files = directory.listFiles();
+            if (files == null) return;
+            Set<String> inUse = new java.util.HashSet<>();
+            for (String queued : OfflinePlaybackService.queueSnapshot()) inUse.add(idOf(queued));
+            long limit = System.currentTimeMillis() - STREAM_ENTRY_MAX_AGE_MILLISECONDS;
+            for (File file : files) {
+                if (file.lastModified() < limit && !inUse.contains(idOf(file.getName()))) {
+                    //noinspection ResultOfMethodCallIgnored
+                    file.delete();
+                }
+            }
+        } catch (Exception ex) {
+            Logger.printDebug(() -> "Could not clean the streamed tracks", ex);
+        }
+    }
+
+    /** @return The id of the track that a queue entry (a file or a stream marker) stands for. */
+    static String videoIdOf(String path) {
+        return idOf(path);
+    }
+
+    /**
+     * Blocking, so never on the main thread. Finds what the offline player has to play for a
+     * track: its downloaded file, or else a marker that makes it stream the track.
+     *
+     * @return The path to put in the offline queue, or null when the track cannot be found.
+     */
+    @Nullable
+    static String playablePath(String videoId) {
+        File local = localFileFor(videoId);
+        if (local != null) return local.getAbsolutePath();
+        if (!VIDEO_ID.matcher(videoId).matches()) return null;
+        File marker = createStreamEntry(videoId);
+        return marker == null ? null : marker.getAbsolutePath();
+    }
+
+    private static String idOf(String pathOrName) {
+        String name = new File(pathOrName).getName();
+        int dot = name.lastIndexOf('.');
+        return dot > 0 ? name.substring(0, dot) : name;
+    }
+
+    /**
+     * While the offline player is playing, a track chosen elsewhere in the app goes into its queue
+     * instead of waking the app's own player. A track that is not downloaded is streamed.
+     * Must be called from the main thread.
+     *
+     * @param next True to play it right after the current track, false to put it at the end.
+     */
+    public static void queueInOfflinePlayer(String videoId, boolean next) {
+        File local = localFileFor(videoId);
+        if (local != null) {
+            addToOfflineQueue(local.getAbsolutePath(), next);
+            return;
+        }
+        if (!VIDEO_ID.matcher(videoId).matches()) {
+            Utils.showToastShort(str("morphe_music_stream_add_failed"));
+            return;
+        }
+        Utils.submitOnBackgroundThread(() -> {
+            File marker = createStreamEntry(videoId);
+            Utils.runOnMainThread(() -> {
+                if (marker == null) Utils.showToastShort(str("morphe_music_stream_add_failed"));
+                else addToOfflineQueue(marker.getAbsolutePath(), next);
+            });
+            return null;
+        });
+    }
+
+    private static void addToOfflineQueue(String path, boolean next) {
+        ArrayList<String> queue = next
+                ? OfflinePlaybackService.playNext(path)
+                : OfflinePlaybackService.playLast(path);
+        if (queue == null) {
+            // The offline player stopped while the track was being found.
+            Utils.showToastShort(str("morphe_music_stream_add_failed"));
+            return;
+        }
+        Utils.showToastShort(str(next
+                ? "morphe_music_swipe_play_next_added"
+                : "morphe_music_playlist_track_tap_added_to_queue"));
+    }
+
+    // endregion
 
     private record ResolvedStream(Format format, VideoDetails details) {
     }
@@ -269,7 +479,7 @@ public final class LocalDownloadManager {
 
     private static void downloadWithResume(String videoId, String title, String url,
                                            File temporary, long expectedLength) throws Exception {
-        Utils.showToastShort(str("morphe_music_downloads_started"));
+        toastUnlessBatch(str("morphe_music_downloads_started"));
         awaitNotificationSlot();
         showDownloadNotification(videoId, title, 0, true, str("morphe_music_downloads_starting"));
 

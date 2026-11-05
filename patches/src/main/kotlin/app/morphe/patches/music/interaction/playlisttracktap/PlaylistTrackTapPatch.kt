@@ -7,6 +7,7 @@
 
 package app.morphe.patches.music.interaction.playlisttracktap
 
+import app.morphe.patcher.extensions.InstructionExtensions.addInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
 import app.morphe.patcher.patch.BytecodePatchContext
@@ -17,13 +18,17 @@ import app.morphe.patches.music.misc.extension.sharedExtensionPatch
 import app.morphe.patches.music.misc.settings.PreferenceScreen
 import app.morphe.patches.music.misc.settings.settingsPatch
 import app.morphe.patches.music.shared.Constants.COMPATIBILITY_YOUTUBE_MUSIC
+import app.morphe.patches.music.shared.MusicActivityOnCreateFingerprint
 import app.morphe.patches.shared.misc.settings.preference.ListPreference
+import app.morphe.patches.shared.misc.settings.preference.SwitchPreference
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.builder.MutableMethodImplementation
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethod
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethodParameter
 
 private const val EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/PlaylistTrackTapPatch;"
+private const val SWIPE_EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/PlaylistSwipePlayNextPatch;"
+private const val PRESS_BOUNCE_EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/downloads/PressBounce;"
 private const val EXTENSION_COMMAND_INTERFACE = $$"Lapp/morphe/extension/music/patches/PlaylistTrackTapPatch$Command;"
 
 @Suppress("unused")
@@ -41,7 +46,12 @@ val playlistTrackTapPatch = bytecodePatch(
 
     execute {
         PreferenceScreen.PLAYER.addPreferences(
-            ListPreference("morphe_music_playlist_track_tap_action")
+            ListPreference("morphe_music_playlist_track_tap_action"),
+            SwitchPreference("morphe_music_swipe_play_next", summary = true)
+        )
+
+        PreferenceScreen.GENERAL.addPreferences(
+            SwitchPreference("morphe_music_smooth_animations", summary = true)
         )
 
         // region Resolve the obfuscated proto classes.
@@ -157,6 +167,16 @@ val playlistTrackTapPatch = bytecodePatch(
             )
 
             addInterfaceMethod(
+                "patch_createEmptyCommand",
+                registerCount = 1,
+                """
+                    # The default command is resolved as 'nothing to do'.
+                    sget-object v0, $commandDefaultInstanceField
+                    return-object v0
+                """
+            )
+
+            addInterfaceMethod(
                 "patch_createQueueAddCommand",
                 registerCount = 3,
                 """
@@ -185,6 +205,19 @@ val playlistTrackTapPatch = bytecodePatch(
                 move-result-object p1
                 check-cast p1, $commandClass
             """
+        )
+
+        // The swipe to play next watches the touches of the windows, and replays a tap that the
+        // hook above turns into 'play next'. It is installed here so the two always come together.
+        MusicActivityOnCreateFingerprint.method.addInstruction(
+            0,
+            "invoke-static {}, $SWIPE_EXTENSION_CLASS->install()V"
+        )
+
+        // Every small button of the app gives way under the finger and springs back.
+        MusicActivityOnCreateFingerprint.method.addInstruction(
+            0,
+            "invoke-static {}, $PRESS_BOUNCE_EXTENSION_CLASS->install()V"
         )
     }
 }

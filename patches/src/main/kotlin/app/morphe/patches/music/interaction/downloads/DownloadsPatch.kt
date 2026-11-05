@@ -7,10 +7,14 @@
 
 package app.morphe.patches.music.interaction.downloads
 
+import app.morphe.patcher.extensions.InstructionExtensions.addInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
 import app.morphe.patcher.util.cloneParameters
+import app.morphe.patches.music.layout.hide.general.ChipCloudFingerprint
+import app.morphe.patches.music.misc.auth.authHookPatch
 import app.morphe.patches.music.misc.settings.PreferenceScreen
 import app.morphe.patches.music.misc.settings.settingsPatch
 import app.morphe.patches.music.shared.Constants.COMPATIBILITY_YOUTUBE_MUSIC
@@ -24,6 +28,7 @@ import app.morphe.patches.shared.misc.textcomponent.hookSpannableString
 import app.morphe.patches.shared.misc.textcomponent.textComponentPatch
 import app.morphe.util.addInstructionsAtControlFlowLabel
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 
 private val OFFLINE_PLAYBACK_PERMISSIONS = listOf(
     "android.permission.WAKE_LOCK",
@@ -52,6 +57,18 @@ private val downloadsResourcePatch = resourcePatch {
                     )
                 )
             )
+        )
+
+        PreferenceScreen.PLAYER.addPreferences(
+            SwitchPreference("morphe_music_offline_mini_bar", summary = true)
+        )
+
+        PreferenceScreen.PLAYER.addPreferences(
+            SwitchPreference("morphe_music_home_downloads_chip", summary = true)
+        )
+
+        PreferenceScreen.PLAYER.addPreferences(
+            SwitchPreference("morphe_music_home_favorites_chip", summary = true)
         )
 
         val manifest = get("AndroidManifest.xml")
@@ -83,6 +100,8 @@ private val downloadsResourcePatch = resourcePatch {
 }
 
 private const val EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/DownloadsPatch;"
+private const val HOME_CHIP_CLASS =
+    "Lapp/morphe/extension/music/patches/downloads/HomeDownloadsChip;"
 private const val EXTENSION_PROTOCOL_BUFFER_INTERFACE =
     $$"Lapp/morphe/extension/music/patches/DownloadsPatch$ProtocolBufferFieldInterface;"
 
@@ -97,13 +116,27 @@ val downloadsPatch = bytecodePatch(
         downloadsResourcePatch,
         settingsPatch,
         textComponentPatch,
-        musicVideoInformationPatch
+        musicVideoInformationPatch,
+        // Gives the favorites by artist page the sign-in headers of the app.
+        authHookPatch
     )
 
     compatibleWith(COMPATIBILITY_YOUTUBE_MUSIC)
 
     execute {
         hookSpannableString(EXTENSION_CLASS)
+
+        // The chip row of the app is handed to the Downloads chip of the home page, which adds
+        // its chip only to the row of the home page. Same spot as the 'hide filter bar' hook.
+        ChipCloudFingerprint.method.apply {
+            val targetIndex = ChipCloudFingerprint.instructionMatches.last().index
+            val targetRegister = getInstruction<OneRegisterInstruction>(targetIndex).registerA
+
+            addInstruction(
+                targetIndex + 1,
+                "invoke-static { v$targetRegister }, $HOME_CHIP_CLASS->onChipCloudInflated(Landroid/view/View;)V"
+            )
+        }
 
         val (_, downloadCall) = OfflineVideoEndpointFingerprint.instructionMatches
 

@@ -90,6 +90,8 @@ public class Settings extends SharedYouTubeSettings {
     public static final BooleanSetting ENABLE_SWIPE_TO_DISMISS_MINIPLAYER = new BooleanSetting("morphe_music_enable_swipe_to_dismiss_miniplayer", FALSE, true);
     public static final BooleanSetting HIDE_AUDIO_VIDEO_TOGGLE = new BooleanSetting("morphe_music_hide_audio_video_toggle", FALSE, true);
     public static final BooleanSetting ENABLE_AUDIO_VIDEO_SWITCH = new BooleanSetting("morphe_music_enable_audio_video_switch", FALSE, true, parentNot(Settings.HIDE_AUDIO_VIDEO_TOGGLE));
+    public static final BooleanSetting AUTO_AUDIO_VERSION = new BooleanSetting("morphe_music_auto_audio_version", TRUE, parent(ENABLE_AUDIO_VIDEO_SWITCH));
+    public static final BooleanSetting VIDEO_FALLBACK = new BooleanSetting("morphe_music_video_fallback", TRUE, parent(ENABLE_AUDIO_VIDEO_SWITCH));
     public static final BooleanSetting HIDE_LYRICS_SHARE_BUTTON = new BooleanSetting("morphe_music_hide_lyrics_share_button", FALSE, true);
     public static final BooleanSetting HIDE_LYRICS_TRANSLATE_BUTTON = new BooleanSetting("morphe_music_hide_lyrics_translate_button", FALSE, true);
     public static final BooleanSetting HIDE_REPEAT_BUTTON = new BooleanSetting("morphe_music_hide_repeat_button", FALSE, true);
@@ -99,12 +101,21 @@ public class Settings extends SharedYouTubeSettings {
     public static final IntegerSetting PLAYBACK_SPEED = new IntegerSetting("morphe_music_playback_speed", 100);
     public static final BooleanSetting PLAYBACK_SPEED_CHANGE_PITCH = new BooleanSetting("morphe_music_playback_speed_change_pitch", FALSE);
     public static final EnumSetting<TapAction> PLAYLIST_TRACK_TAP_ACTION = new EnumSetting<>("morphe_music_playlist_track_tap_action", TapAction.DEFAULT);
+    public static final BooleanSetting SWIPE_PLAY_NEXT = new BooleanSetting("morphe_music_swipe_play_next", TRUE);
     public static final BooleanSetting REMEMBER_REPEAT_STATE = new BooleanSetting("morphe_music_remember_repeat_state", FALSE, true, parentNot(HIDE_REPEAT_BUTTON));
     public static final BooleanSetting REMEMBER_SHUFFLE_STATE = new BooleanSetting("morphe_music_remember_shuffle_state", FALSE, true, parentNot(HIDE_SHUFFLE_BUTTON));
     public static final BooleanSetting SAVED_SHUFFLE_STATE = new BooleanSetting("morphe_music_saved_shuffle_state", FALSE, parent(REMEMBER_SHUFFLE_STATE));
 
+    // Animations
+    public static final BooleanSetting SMOOTH_ANIMATIONS = new BooleanSetting("morphe_music_smooth_animations", TRUE);
+
     // Downloads
     public static final StringSetting DOWNLOADS_SORT = new StringSetting("morphe_music_downloads_sort", "ARTIST", false, false);
+    public static final BooleanSetting DOWNLOADS_SORT_REVERSED = new BooleanSetting("morphe_music_downloads_sort_reversed", FALSE);
+    public static final BooleanSetting DOWNLOADS_FAVORITES_FIRST = new BooleanSetting("morphe_music_downloads_favorites_first", FALSE);
+    public static final BooleanSetting OFFLINE_MINI_BAR = new BooleanSetting("morphe_music_offline_mini_bar", TRUE);
+    public static final BooleanSetting HOME_DOWNLOADS_CHIP = new BooleanSetting("morphe_music_home_downloads_chip", TRUE);
+    public static final BooleanSetting HOME_FAVORITES_CHIP = new BooleanSetting("morphe_music_home_favorites_chip", TRUE);
 
     // Action buttons
     public static final BooleanSetting HIDE_ACTION_BAR = new BooleanSetting("morphe_music_hide_action_bar", FALSE, true);

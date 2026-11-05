@@ -23,7 +23,10 @@ import android.preference.PreferenceFragment;
 import android.view.View;
 import android.widget.Toolbar;
 
+import app.morphe.extension.music.patches.DownloadsPatch;
+import app.morphe.extension.music.patches.downloads.LikedArtistsFragment;
 import app.morphe.extension.music.patches.downloads.LocalDownloadsFragment;
+import app.morphe.extension.music.patches.downloads.OfflineMiniBar;
 import app.morphe.extension.music.settings.preference.MusicPreferenceFragment;
 import app.morphe.extension.music.settings.search.MusicSearchViewController;
 import app.morphe.extension.shared.Logger;
@@ -45,6 +48,7 @@ public class MusicActivityHook extends BaseActivityHook {
     @SuppressLint("StaticFieldLeak")
     public static MusicSearchViewController searchViewController;
     private static boolean downloadsMode;
+    private static boolean favoritesMode;
 
     private static final boolean USE_BOLD_ICONS = Settings.SETTINGS_INITIALIZED.get()
             && !SpoofAppVersionPatch.isSpoofingToLessThan("8.40.00");
@@ -62,6 +66,7 @@ public class MusicActivityHook extends BaseActivityHook {
     @SuppressWarnings("unused")
     public static void onMainActivityCreate() {
         Utils.setIsDarkModeEnabled(true);
+        OfflineMiniBar.install();
     }
 
     /**
@@ -72,6 +77,8 @@ public class MusicActivityHook extends BaseActivityHook {
 
         downloadsMode = BaseActivityHook.MORPHE_DOWNLOADS_INTENT.equals(
                 parentActivity.getIntent().getDataString());
+        favoritesMode = downloadsMode
+                && parentActivity.getIntent().getBooleanExtra(DownloadsPatch.FAVORITES_EXTRA, false);
 
         // Prevent opening multiple settings activities if menu is double tapped quickly.
         if (Utils.isFastClick()) {
@@ -148,7 +155,9 @@ public class MusicActivityHook extends BaseActivityHook {
      */
     @Override
     protected void onPostToolbarSetup(Activity activity, Toolbar toolbar, PreferenceFragment fragment) {
-        if (fragment instanceof LocalDownloadsFragment) {
+        if (fragment instanceof LikedArtistsFragment) {
+            toolbar.setTitle(str("morphe_music_favorites_screen_title"));
+        } else if (fragment instanceof LocalDownloadsFragment) {
             toolbar.setTitle(str("morphe_music_downloads_screen_title"));
         } else if (fragment instanceof MusicPreferenceFragment) {
             searchViewController = MusicSearchViewController.addSearchViewComponents(
@@ -161,6 +170,7 @@ public class MusicActivityHook extends BaseActivityHook {
      */
     @Override
     protected PreferenceFragment createPreferenceFragment() {
+        if (favoritesMode) return new LikedArtistsFragment();
         return downloadsMode ? new LocalDownloadsFragment() : new MusicPreferenceFragment();
     }
 
@@ -173,7 +183,10 @@ public class MusicActivityHook extends BaseActivityHook {
      */
     @SuppressWarnings("unused")
     public static boolean handleFinish(Activity activity) {
-        return MusicSearchViewController.handleFinish(searchViewController)
+        // The downloads screen first uses the back button for its player and its opened album.
+        return LikedArtistsFragment.handleBack()
+                || LocalDownloadsFragment.handleBack()
+                || MusicSearchViewController.handleFinish(searchViewController)
                 || AbstractPreferenceFragment.showRestartDialogIfNeeded(activity);
     }
 

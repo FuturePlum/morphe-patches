@@ -37,7 +37,9 @@ val enableAudioVideoSwitchPatch = bytecodePatch(
 
     execute {
         PreferenceScreen.PLAYER.addPreferences(
-            SwitchPreference("morphe_music_enable_audio_video_switch", summary = true)
+            SwitchPreference("morphe_music_enable_audio_video_switch", summary = true),
+            SwitchPreference("morphe_music_auto_audio_version", summary = true),
+            SwitchPreference("morphe_music_video_fallback", summary = true)
         )
 
         AudioVideoSwitchPillContainerFingerprint.matchAll().forEach { match ->
