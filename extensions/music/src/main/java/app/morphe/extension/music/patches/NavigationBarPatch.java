@@ -21,6 +21,11 @@ public class NavigationBarPatch {
         }
     }
 
+    /** Name of the tab the user last opened, or empty before any tab was opened. */
+    public static String getLastNavigationName() {
+        return lastYTNavigationEnumName;
+    }
+
     public static void hideNavigationLabel(TextView textview) {
         Utils.hideViewUnderCondition(Settings.HIDE_NAVIGATION_BAR_LABEL.get(), textview);
     }

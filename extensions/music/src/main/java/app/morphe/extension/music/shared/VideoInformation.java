@@ -31,9 +31,9 @@ public final class VideoInformation {
     private static final Collection<VideoIdListener> videoIdListeners = new CopyOnWriteArrayList<>();
 
     @NonNull
-    private static volatile String videoId = "";
-    private static volatile long videoLength = 0;
-    private static volatile long videoTime = -1;
+    private static String videoId = "";
+    private static long videoLength = 0;
+    private static long videoTime = -1;
 
     /** Injection point. */
     public static void initialize() {
@@ -79,6 +79,9 @@ public final class VideoInformation {
     /** Injection point. Called on main thread ~every 1000ms. */
     public static void setVideoTime(final long currentPlaybackTime) {
         videoTime = currentPlaybackTime;
+        // Online music is moving: the offline mini player gives way to the online player.
+        app.morphe.extension.music.patches.downloads.OfflineMiniPlayerOverlay
+                .onOnlineProgress(currentPlaybackTime);
     }
 
     /** Injection point. */

@@ -24,6 +24,7 @@ import android.view.View;
 import android.widget.Toolbar;
 
 import app.morphe.extension.music.patches.downloads.LocalDownloadsFragment;
+import app.morphe.extension.music.patches.downloads.OfflineMiniPlayerOverlay;
 import app.morphe.extension.music.settings.preference.MusicPreferenceFragment;
 import app.morphe.extension.music.settings.search.MusicSearchViewController;
 import app.morphe.extension.shared.Logger;
@@ -62,6 +63,8 @@ public class MusicActivityHook extends BaseActivityHook {
     @SuppressWarnings("unused")
     public static void onMainActivityCreate() {
         Utils.setIsDarkModeEnabled(true);
+        // Offline mini player, shown on every page of the app while offline music plays.
+        OfflineMiniPlayerOverlay.install();
     }
 
     /**
@@ -173,14 +176,9 @@ public class MusicActivityHook extends BaseActivityHook {
      */
     @SuppressWarnings("unused")
     public static boolean handleFinish(Activity activity) {
-        return MusicSearchViewController.handleFinish(searchViewController)
-                || handleDownloadsBack(activity)
+        return LocalDownloadsFragment.handleBack()
+                || MusicSearchViewController.handleFinish(searchViewController)
                 || AbstractPreferenceFragment.showRestartDialogIfNeeded(activity);
-    }
-
-    private static boolean handleDownloadsBack(Activity activity) {
-        return activity.getFragmentManager().findFragmentById(ID_MORPHE_SETTINGS_FRAGMENTS)
-                instanceof LocalDownloadsFragment downloads && downloads.handleBack();
     }
 
     /**

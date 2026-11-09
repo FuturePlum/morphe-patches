@@ -261,7 +261,8 @@ public final class PlaylistRequest {
             innerTubeBody.put("context", context);
             innerTubeBody.put("contentCheckOk", true);
             innerTubeBody.put("racyCheckOk", true);
-            innerTubeBody.put("videoId", videoId);
+            // A whole playlist is requested without a starting track.
+            if (!videoId.isEmpty()) innerTubeBody.put("videoId", videoId);
             innerTubeBody.put("playlistId", playlistId);
         } catch (JSONException e) {
             Logger.printException(() -> "Failed to create application innerTubeBody", e);
@@ -269,8 +270,37 @@ public final class PlaylistRequest {
         return innerTubeBody.toString().getBytes(StandardCharsets.UTF_8);
     }
 
+    /**
+     * Every track of an album or a playlist, in order. Blocks, so it must not be called from
+     * the main thread. Only the first page the server returns is read.
+     *
+     * @return The tracks, or an empty array if the request failed.
+     */
+    @NonNull
+    public static Song[] fetchPlaylistSongs(@NonNull String playlistId) {
+        for (int attempt = 1; ; attempt++) {
+            JSONObject playlistJson = sendRequest("", playlistId);
+            if (playlistJson != null) {
+                return parseResponse(playlistJson, false);
+            }
+            if (attempt >= MAX_FETCH_ATTEMPTS) return NO_SONGS;
+            try {
+                //noinspection BusyWait
+                Thread.sleep(RETRY_BACKOFF_MILLISECONDS * attempt);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                return NO_SONGS;
+            }
+        }
+    }
+
     @NonNull
     private static Song[] parseResponse(@NonNull JSONObject playlistJson) {
+        return parseResponse(playlistJson, true);
+    }
+
+    @NonNull
+    private static Song[] parseResponse(@NonNull JSONObject playlistJson, boolean albumOnly) {
         try {
             JSONObject singleColumnWatchNextResults = playlistJson
                     .getJSONObject("contents")
@@ -287,7 +317,7 @@ public final class PlaylistRequest {
             // Top Songs reuses the album's playlistId - the response is only an album when the
             // playlist title starts with "Album" (Song = Top Songs). Hence, the forced hl=en above.
             String title = playlistObj.optString("title", "");
-            if (!title.startsWith("Album")) {
+            if (albumOnly && !title.startsWith("Album")) {
                 return NO_SONGS;
             }
 
